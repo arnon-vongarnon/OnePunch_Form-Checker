@@ -1,13 +1,15 @@
 from ultralytics import YOLO
 import cv2 as cv
 print(cv.__version__)
+# conda activate yolo312pip
+
 # Load models
 pose_model = YOLO("./models/yolo11n-pose.pt")
 ball_model = YOLO("./models/yolo11n.pt")
 
 # Video source (0 = webcam)
 # cap = cv.VideoCapture(0)
-cap = cv.VideoCapture("videos/test2.mp4")
+cap = cv.VideoCapture("videos/test3.mp4")
 
 while True:
     ret, frame = cap.read()
