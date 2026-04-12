@@ -9,7 +9,7 @@ ball_model = YOLO("./models/yolo11n.pt")
 
 # Video source (0 = webcam)
 # cap = cv.VideoCapture(0)
-cap = cv.VideoCapture("videos/test2.mp4")
+cap = cv.VideoCapture("videos/test9.mp4")
 
 while True:
     ret, frame = cap.read()
