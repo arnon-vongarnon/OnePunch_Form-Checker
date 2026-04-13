@@ -1,6 +1,7 @@
 from ultralytics import YOLO
 import cv2 as cv
 print(cv.__version__)
+
 # conda activate yolo312pip
 
 # Load models
