@@ -1,3 +1,5 @@
+# Made by Xiaoke Yu g6836915 AND Arnon Vongarnon ID6838864
+# One Punch Form Checker
 import cv2
 import numpy as np
 import time
