@@ -16,19 +16,19 @@ except ImportError:
 # ─────────────────────────────────────────────
 #  CONFIG
 # ─────────────────────────────────────────────
-POSE_CONF        = 0.4
-HIT_RADIUS       = 60
-ENEMY_SPEED      = 1.4          # px / frame
-ENEMY_SPAWN_SEC  = 3.0
-MAX_ENEMIES      = 5
-LIVES            = 3
-COMBO_TIMEOUT    = 3.5
-VERDICT_FRAMES   = 80
+POSE_CONF = 0.4
+HIT_RADIUS = 60
+ENEMY_SPEED = 1.4          # px / frame
+ENEMY_SPAWN_SEC = 3.0
+MAX_ENEMIES = 5
+LIVES = 3
+COMBO_TIMEOUT = 3.5
+VERDICT_FRAMES = 80
 
-L_ELBOW  = 7
-R_ELBOW  = 8
+L_ELBOW = 7
+R_ELBOW = 8
 PUNCH_VEL_THRESH = 40
-WRIST_HISTORY    = 5
+WRIST_HISTORY = 5
 
 # YOLOv8 keypoint indices
 NOSE, L_SHLDR, R_SHLDR, L_WRIST, R_WRIST = 0, 5, 6, 9, 10
@@ -43,32 +43,33 @@ ENEMY_ROSTER = [
 ]
 
 # Assets folder – same directory as this script
-ASSET_DIR = os.path.dirname(os.path.abspath(__file__))
+ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images")
 
 # OPM colour palette
-C_YELLOW  = (0,   215, 255)
-C_WHITE   = (255, 255, 255)
-C_RED     = (30,   30, 220)
-C_ORANGE  = (20,  140, 255)
-C_BLACK   = (0,     0,   0)
-C_GREEN   = (40,  200,  40)
-C_DARK    = (12,   12,  12)
-C_GOLD    = (30,  185, 255)
+C_YELLOW = (0,   215, 255)
+C_WHITE = (255, 255, 255)
+C_RED = (30,   30, 220)
+C_ORANGE = (20,  140, 255)
+C_BLACK = (0,     0,   0)
+C_GREEN = (40,  200,  40)
+C_DARK = (12,   12,  12)
+C_GOLD = (30,  185, 255)
 
 # ─────────────────────────────────────────────
 #  IMAGE HELPERS
 # ─────────────────────────────────────────────
 
+
 def load_png(filename):
     """Load a PNG with alpha channel.  Returns None on failure."""
     path = os.path.join(ASSET_DIR, filename)
-    img  = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+    img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
     if img is None:
         print(f"[warn] could not load: {path}")
         return None
     if img.shape[2] == 3:                          # add alpha if missing
         alpha = np.ones(img.shape[:2], dtype=np.uint8) * 255
-        img   = np.dstack([img, alpha])
+        img = np.dstack([img, alpha])
     return img
 
 
@@ -86,15 +87,20 @@ def overlay_png(bg, overlay, cx, cy, scale=1.0, alpha_mult=1.0):
     nh = max(1, int(oh * scale))
     resized = cv2.resize(overlay, (nw, nh), interpolation=cv2.INTER_AREA)
 
-    x1 = cx - nw // 2;  y1 = cy - nh // 2
-    x2 = x1 + nw;       y2 = y1 + nh
+    x1 = cx - nw // 2
+    y1 = cy - nh // 2
+    x2 = x1 + nw
+    y2 = y1 + nh
 
     bh, bw = bg.shape[:2]
-    ox1 = max(0, -x1);  oy1 = max(0, -y1)
+    ox1 = max(0, -x1)
+    oy1 = max(0, -y1)
     ox2 = nw - max(0, x2 - bw)
     oy2 = nh - max(0, y2 - bh)
-    x1  = max(0, x1);   y1 = max(0, y1)
-    x2  = min(bw, x2);  y2 = min(bh, y2)
+    x1 = max(0, x1)
+    y1 = max(0, y1)
+    x2 = min(bw, x2)
+    y2 = min(bh, y2)
 
     if x2 <= x1 or y2 <= y1:
         return bg
@@ -104,7 +110,7 @@ def overlay_png(bg, overlay, cx, cy, scale=1.0, alpha_mult=1.0):
         return bg
 
     alpha = roi[:, :, 3:4].astype(np.float32) / 255.0 * alpha_mult
-    rgb   = roi[:, :, :3].astype(np.float32)
+    rgb = roi[:, :, :3].astype(np.float32)
     bg_roi = bg[y1:y2, x1:x2].astype(np.float32)
     blended = rgb * alpha + bg_roi * (1.0 - alpha)
     bg[y1:y2, x1:x2] = np.clip(blended, 0, 255).astype(np.uint8)
@@ -121,9 +127,10 @@ def flash_white(img):
 #  LOAD ASSETS  (called once at startup)
 # ─────────────────────────────────────────────
 
+
 def load_assets():
     enemies = []
-    files   = [
+    files = [
         "DeepSeaKing.png",
         "Orochi.png",
         "Psykos.png",
@@ -143,6 +150,7 @@ def load_assets():
 #  HELPERS
 # ─────────────────────────────────────────────
 
+
 def get_kp(kpts, idx):
     if kpts is None or idx >= len(kpts):
         return None
@@ -159,7 +167,8 @@ def draw_text_shadowed(frame, text, pos, font=cv2.FONT_HERSHEY_DUPLEX,
     x, y = pos
     cv2.putText(frame, text, (x + shadow_offset, y + shadow_offset),
                 font, scale, C_BLACK, thickness + 2, cv2.LINE_AA)
-    cv2.putText(frame, text, (x, y), font, scale, color, thickness, cv2.LINE_AA)
+    cv2.putText(frame, text, (x, y), font, scale,
+                color, thickness, cv2.LINE_AA)
 
 
 def draw_outlined_rect(frame, pt1, pt2, fill_color, border_color, alpha=0.75):
@@ -172,20 +181,21 @@ def draw_outlined_rect(frame, pt1, pt2, fill_color, border_color, alpha=0.75):
 #  FORM CHECKER
 # ─────────────────────────────────────────────
 
+
 class FormChecker:
     def __init__(self):
         self.reset()
 
     def reset(self):
-        self.verdict      = "UNKNOWN"
-        self._wrist_hist  = deque(maxlen=WRIST_HISTORY)
-        self._cooldown    = 0
-        self.l_wrist      = None
-        self.r_wrist      = None
-        self.l_elbow      = None
-        self.r_elbow      = None
+        self.verdict = "UNKNOWN"
+        self._wrist_hist = deque(maxlen=WRIST_HISTORY)
+        self._cooldown = 0
+        self.l_wrist = None
+        self.r_wrist = None
+        self.l_elbow = None
+        self.r_elbow = None
         self.arm_extended = False
-        self.fast_enough  = False
+        self.fast_enough = False
 
     def update(self, pose_results):
         if self._cooldown > 0:
@@ -220,7 +230,7 @@ class FormChecker:
             self.fast_enough = vel > PUNCH_VEL_THRESH
 
         if self.arm_extended and self.fast_enough:
-            self.verdict   = "VALID"
+            self.verdict = "VALID"
             self._cooldown = 15
         else:
             self.verdict = "FOUL" if not self.arm_extended else "UNKNOWN"
@@ -231,33 +241,36 @@ class FormChecker:
 #  ENEMY  (replaces Ref)
 # ─────────────────────────────────────────────
 
+
 class Enemy:
     TARGET_H = 110          # display height in pixels
 
     def __init__(self, x, fw, enemy_data):
-        self.x        = float(x)
-        self.y        = -60.0
-        self.fw       = fw
-        self.data     = enemy_data          # dict with img / name / power
-        self.alive    = True
-        self.flash    = 0
+        self.x = float(x)
+        self.y = -60.0
+        self.fw = fw
+        self.data = enemy_data          # dict with img / name / power
+        self.alive = True
+        self.flash = 0
         self.dodge_dx = 0.0
-        self.bob_t    = random.uniform(0, math.tau)   # bobbing phase
+        self.bob_t = random.uniform(0, math.tau)   # bobbing phase
 
         img = enemy_data["img"]
         if img is not None:
-            ratio     = self.TARGET_H / img.shape[0]
-            self.w    = int(img.shape[1] * ratio)
-            self.h    = self.TARGET_H
+            ratio = self.TARGET_H / img.shape[0]
+            self.w = int(img.shape[1] * ratio)
+            self.h = self.TARGET_H
             self.scale = ratio
         else:
-            self.w = 70;  self.h = 90;  self.scale = 1.0
+            self.w = 70
+            self.h = 90
+            self.scale = 1.0
 
     def update(self):
-        self.y     += ENEMY_SPEED
+        self.y += ENEMY_SPEED
         self.bob_t += 0.08
         if self.dodge_dx:
-            self.x  = max(40, min(self.fw - 40, self.x + self.dodge_dx))
+            self.x = max(40, min(self.fw - 40, self.x + self.dodge_dx))
             self.dodge_dx *= 0.85
             if abs(self.dodge_dx) < 0.3:
                 self.dodge_dx = 0.0
@@ -265,8 +278,8 @@ class Enemy:
             self.flash -= 1
 
     def draw(self, frame):
-        x  = int(self.x)
-        y  = int(self.y + math.sin(self.bob_t) * 4)    # gentle bob
+        x = int(self.x)
+        y = int(self.y + math.sin(self.bob_t) * 4)    # gentle bob
 
         img = self.data["img"]
         if img is not None:
@@ -277,17 +290,19 @@ class Enemy:
             hw, hh = self.w // 2, self.h // 2
             col = C_WHITE if self.flash > 0 else (40, 40, 180)
             cv2.rectangle(frame, (x - hw, y - hh), (x + hw, y + hh), col, -1)
-            cv2.rectangle(frame, (x - hw, y - hh), (x + hw, y + hh), C_BLACK, 1)
+            cv2.rectangle(frame, (x - hw, y - hh),
+                          (x + hw, y + hh), C_BLACK, 1)
 
         # name tag below enemy
-        name  = self.data["name"]
+        name = self.data["name"]
         power = self.data["power"]
         (tw, th), _ = cv2.getTextSize(name, cv2.FONT_HERSHEY_SIMPLEX, 0.38, 1)
         tx = x - tw // 2
         ty = y + self.h // 2 + 16
         # power tier badge
         badge_col = C_RED if power == "DRAGON" else C_ORANGE
-        cv2.rectangle(frame, (tx - 4, ty - th - 2), (tx + tw + 4, ty + 4), badge_col, -1)
+        cv2.rectangle(frame, (tx - 4, ty - th - 2),
+                      (tx + tw + 4, ty + 4), badge_col, -1)
         cv2.putText(frame, name, (tx, ty),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.38, C_WHITE, 1, cv2.LINE_AA)
 
@@ -298,6 +313,7 @@ class Enemy:
 # ─────────────────────────────────────────────
 #  SUIT OVERLAY  (Saitama costume on player)
 # ─────────────────────────────────────────────
+
 
 def draw_saitama_suit(frame, pose_results, suit_img,
                       width_factor=2.4, vertical_offset=0.38):
@@ -313,9 +329,9 @@ def draw_saitama_suit(frame, pose_results, suit_img,
     if r.keypoints is None or len(r.keypoints.data) == 0:
         return frame
 
-    kpts    = r.keypoints.data[0]
-    l_sh    = get_kp(kpts, L_SHLDR)
-    r_sh    = get_kp(kpts, R_SHLDR)
+    kpts = r.keypoints.data[0]
+    l_sh = get_kp(kpts, L_SHLDR)
+    r_sh = get_kp(kpts, R_SHLDR)
 
     if l_sh is None or r_sh is None:
         return frame
@@ -324,11 +340,11 @@ def draw_saitama_suit(frame, pose_results, suit_img,
     if shoulder_w < 10:
         return frame
 
-    scale  = (shoulder_w * width_factor) / suit_img.shape[1]
-    cx     = int((l_sh[0] + r_sh[0]) / 2)
-    sh_y   = int((l_sh[1] + r_sh[1]) / 2)
+    scale = (shoulder_w * width_factor) / suit_img.shape[1]
+    cx = int((l_sh[0] + r_sh[0]) / 2)
+    sh_y = int((l_sh[1] + r_sh[1]) / 2)
     offset = int(suit_img.shape[0] * scale * vertical_offset)
-    cy     = sh_y + offset
+    cy = sh_y + offset
 
     overlay_png(frame, suit_img, cx, cy, scale, alpha_mult=0.92)
     return frame
@@ -336,6 +352,7 @@ def draw_saitama_suit(frame, pose_results, suit_img,
 # ─────────────────────────────────────────────
 #  HEAD OVERLAY  (Saitama bald head on player)
 # ─────────────────────────────────────────────
+
 
 def draw_saitama_head(frame, pose_results, head_img,
                       size_factor=2.2, vertical_offset=-0.45):
@@ -364,10 +381,10 @@ def draw_saitama_head(frame, pose_results, head_img,
     if shoulder_w < 10:
         return frame
 
-    scale          = (shoulder_w * size_factor) / head_img.shape[1]
-    head_h_scaled  = int(head_img.shape[0] * scale)
-    cx             = int(nose[0])
-    cy             = int(nose[1]) + int(head_h_scaled * vertical_offset)
+    scale = (shoulder_w * size_factor) / head_img.shape[1]
+    head_h_scaled = int(head_img.shape[0] * scale)
+    cx = int(nose[0])
+    cy = int(nose[1]) + int(head_h_scaled * vertical_offset)
 
     overlay_png(frame, head_img, cx, cy, scale, alpha_mult=0.95)
     return frame
@@ -379,26 +396,26 @@ def draw_saitama_head(frame, pose_results, head_img,
 
 class Game:
     def __init__(self, fw, fh, enemy_pool):
-        self.fw   = fw
-        self.fh   = fh
+        self.fw = fw
+        self.fh = fh
         self.pool = enemy_pool      # list of enemy_data dicts
         self.reset()
 
     def reset(self):
-        self.score      = 0
-        self.combo      = 0
-        self.max_combo  = 0
-        self.lives      = LIVES
-        self.hits       = 0
-        self.shots      = 0
-        self.fouls      = 0
-        self.over       = False
+        self.score = 0
+        self.combo = 0
+        self.max_combo = 0
+        self.lives = LIVES
+        self.hits = 0
+        self.shots = 0
+        self.fouls = 0
+        self.over = False
         self.last_hit_t = 0.0
-        self.popups     = []
-        self.verdict_txt   = ""
-        self.verdict_col   = C_WHITE
-        self.verdict_left  = 0
-        self.enemies    = []
+        self.popups = []
+        self.verdict_txt = ""
+        self.verdict_col = C_WHITE
+        self.verdict_left = 0
+        self.enemies = []
         self.last_spawn = time.time()
         self.start_time = time.time()
 
@@ -408,7 +425,7 @@ class Game:
         alive = [e for e in self.enemies if e.alive]
         if len(alive) >= MAX_ENEMIES:
             return
-        x    = random.randint(80, self.fw - 80)
+        x = random.randint(80, self.fw - 80)
         data = random.choice(self.pool)
         self.enemies.append(Enemy(x, self.fw, data))
         self.last_spawn = time.time()
@@ -436,14 +453,14 @@ class Game:
     # ── hit / foul ───────────────────────────
 
     def register_hit(self, enemy):
-        now         = time.time()
-        self.combo  = (self.combo + 1
-                       if now - self.last_hit_t < COMBO_TIMEOUT else 1)
+        now = time.time()
+        self.combo = (self.combo + 1
+                      if now - self.last_hit_t < COMBO_TIMEOUT else 1)
         self.last_hit_t = now
-        self.max_combo  = max(self.max_combo, self.combo)
-        pts          = 100 * self.combo
-        self.score  += pts
-        self.hits   += 1
+        self.max_combo = max(self.max_combo, self.combo)
+        pts = 100 * self.combo
+        self.score += pts
+        self.hits += 1
         label = (f"+{pts}  x{self.combo} COMBO!" if self.combo > 1
                  else f"+{pts}")
         self.popups.append({
@@ -456,15 +473,15 @@ class Game:
 
     def register_foul(self):
         self.fouls += 1
-        self.combo  = 0
+        self.combo = 0
         for e in self.enemies:
             if e.alive:
                 e.dodge_dx = random.choice([-4.0, 4.0])
         self._set_verdict("SLOPPY FORM!", C_RED)
 
     def _set_verdict(self, txt, col):
-        self.verdict_txt  = txt
-        self.verdict_col  = col
+        self.verdict_txt = txt
+        self.verdict_col = col
         self.verdict_left = VERDICT_FRAMES
 
     # ── draw ─────────────────────────────────
@@ -512,8 +529,8 @@ class Game:
         for i in range(LIVES):
             cx = w - 22 - i * 30
             cy = 75
-            col    = C_RED   if i < self.lives else (60, 60, 60)
-            border = C_GOLD  if i < self.lives else (40, 40, 40)
+            col = C_RED if i < self.lives else (60, 60, 60)
+            border = C_GOLD if i < self.lives else (40, 40, 40)
             cv2.circle(frame, (cx, cy), 11, col,    -1)
             cv2.circle(frame, (cx, cy), 11, border,  1)
             cv2.putText(frame, "!", (cx - 3, cy + 5),
@@ -533,7 +550,7 @@ class Game:
             ("Fast enough",  form.fast_enough),
         ]
         for i, (label, ok) in enumerate(checks):
-            col  = C_GREEN if ok else C_RED
+            col = C_GREEN if ok else C_RED
             icon = "OK" if ok else "--"
             cv2.putText(frame, f"[{icon}] {label}",
                         (px, py + 38 + i * 24),
@@ -555,7 +572,7 @@ class Game:
         self.popups = [p for p in self.popups if now - p["t"] < 1.5]
         for p in self.popups:
             age = now - p["t"]
-            y   = int(p["y"] - age * 60)
+            y = int(p["y"] - age * 60)
             alpha = max(0.0, 1.0 - age / 1.5)
             draw_text_shadowed(frame, p["text"], (p["x"] - 55, y),
                                scale=0.85, color=C_GOLD, thickness=2)
@@ -579,7 +596,8 @@ class Game:
         # outline text
         cv2.putText(frame, self.verdict_txt, (tx + 3, ty + 3),
                     cv2.FONT_HERSHEY_DUPLEX, 1.3, C_BLACK, 6, cv2.LINE_AA)
-        col = tuple(int(c * alpha + 255 * (1 - alpha)) for c in self.verdict_col)
+        col = tuple(int(c * alpha + 255 * (1 - alpha))
+                    for c in self.verdict_col)
         cv2.putText(frame, self.verdict_txt, (tx, ty),
                     cv2.FONT_HERSHEY_DUPLEX, 1.3, col, 3, cv2.LINE_AA)
 
@@ -623,15 +641,16 @@ class Game:
 #  INTRO BANNER
 # ─────────────────────────────────────────────
 
+
 def draw_intro(frame, frame_idx):
     if frame_idx >= 150:
         return
     h, w = frame.shape[:2]
     alpha = max(0.0, 1.0 - frame_idx / 100.0)
-    msg   = "PUNCH THE MONSTERS!"
-    tw    = cv2.getTextSize(msg, cv2.FONT_HERSHEY_DUPLEX, 1.1, 3)[0][0]
-    tx    = w // 2 - tw // 2
-    ty    = h // 2
+    msg = "PUNCH THE MONSTERS!"
+    tw = cv2.getTextSize(msg, cv2.FONT_HERSHEY_DUPLEX, 1.1, 3)[0][0]
+    tx = w // 2 - tw // 2
+    ty = h // 2
 
     ov = frame.copy()
     cv2.rectangle(ov, (tx - 20, ty - 50), (tx + tw + 20, ty + 18),
@@ -646,6 +665,7 @@ def draw_intro(frame, frame_idx):
 # ─────────────────────────────────────────────
 #  MAIN
 # ─────────────────────────────────────────────
+
 
 def run(source,
         suit_width_factor=2.4,
@@ -673,10 +693,10 @@ def run(source,
     fh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     print(f"Camera: {fw}x{fh}")
 
-    form         = FormChecker()
-    game         = Game(fw, fh, enemy_pool)
+    form = FormChecker()
+    game = Game(fw, fh, enemy_pool)
     prev_verdict = "UNKNOWN"
-    frame_idx    = 0
+    frame_idx = 0
 
     win = "ONE PUNCH MAN  [R=restart  P=pause  Q=quit]"
     cv2.namedWindow(win, cv2.WINDOW_NORMAL)
@@ -730,14 +750,14 @@ def run(source,
         # ── punch edge detection ──────────────
         if form_now == "VALID" and prev_verdict != "VALID":
             game.shots += 1
-            hit_enemy  = None
+            hit_enemy = None
             if form.l_wrist is not None:
-                wx, wy   = form.l_wrist
-                closest  = 999999
+                wx, wy = form.l_wrist
+                closest = 999999
                 for e in [en for en in game.enemies if en.alive]:
                     d = math.hypot(wx - e.x, wy - e.y)
                     if d < closest:
-                        closest  = d
+                        closest = d
                         hit_enemy = e
                 if hit_enemy and closest < 220:
                     hit_enemy.alive = False
