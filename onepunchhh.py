@@ -21,7 +21,7 @@ ENEMY_SPAWN_SEC = 3.0
 MAX_ENEMIES = 5
 LIVES = 3
 COMBO_TIMEOUT = 3.5
-VERDICT_FRAMES = 80
+VERDICT_FRAMES = 10
 PUNCH_VEL_THRESH = 40
 WRIST_HISTORY = 5
 
@@ -112,7 +112,8 @@ class FormChecker:
 
     def reset(self):
         self.verdict = "UNKNOWN"
-        self._hist = deque(maxlen=WRIST_HISTORY)
+        self._hist_l = deque(maxlen=WRIST_HISTORY)
+        self._hist_r = deque(maxlen=WRIST_HISTORY)
         self._cooldown = 0
         self.l_wrist = None
         self.r_wrist = None
@@ -129,25 +130,55 @@ class FormChecker:
             return self.verdict
 
         kpts = r.keypoints.data[0]
-        l_shldr = get_kp(kpts, L_SHLDR)
-        l_elbow = get_kp(kpts, L_ELBOW)
-        l_wrist = get_kp(kpts, L_WRIST)
-        self.l_wrist = l_wrist
-        self.r_wrist = get_kp(kpts, R_WRIST)
 
-        if not (l_shldr and l_elbow and l_wrist):
-            return self.verdict
+        l_sh = get_kp(kpts, L_SHLDR)
+        l_el = get_kp(kpts, L_ELBOW)
+        l_wr = get_kp(kpts, L_WRIST)
 
-        self._hist.append(l_wrist[0])
-        self.arm_extended = l_wrist[0] < l_elbow[0] < l_shldr[0]
-        self.fast_enough = (len(self._hist) >= 2 and
-                            abs(self._hist[-1] - self._hist[-2]) > PUNCH_VEL_THRESH)
+        r_sh = get_kp(kpts, R_SHLDR)
+        r_el = get_kp(kpts, R_ELBOW)
+        r_wr = get_kp(kpts, R_WRIST)
 
-        if self.arm_extended and self.fast_enough:
+        self.l_wrist = l_wr
+        self.r_wrist = r_wr
+
+        # --- LEFT ARM ---
+        left_valid = False
+        if l_sh and l_el and l_wr:
+            self._hist_l.append(l_wr[0])
+            left_extended = l_wr[0] > l_el[0] > l_sh[0]
+            left_fast = (len(self._hist_l) >= 2 and
+                         abs(self._hist_l[-1] - self._hist_l[-2]) > PUNCH_VEL_THRESH)
+            left_valid = left_extended and left_fast
+        else:
+            left_extended = False
+            left_fast = False
+
+        # --- RIGHT ARM ---
+        right_valid = False
+        if r_sh and r_el and r_wr:
+            self._hist_r.append(r_wr[0])
+            right_extended = r_wr[0] < r_el[0] < r_sh[0]
+            right_fast = (len(self._hist_r) >= 2 and
+                          abs(self._hist_r[-1] - self._hist_r[-2]) > PUNCH_VEL_THRESH)
+            right_valid = right_extended and right_fast
+        else:
+            right_extended = False
+            right_fast = False
+
+        # combine state
+        self.arm_extended = left_extended or right_extended
+        self.fast_enough = left_fast or right_fast
+
+        # verdict
+        if left_valid or right_valid:
             self.verdict = "VALID"
             self._cooldown = 15
         else:
-            self.verdict = "FOUL" if not self.arm_extended else "UNKNOWN"
+            if not self.arm_extended:
+                self.verdict = "FOUL"
+            else:
+                self.verdict = "UNKNOWN"
 
         return self.verdict
 
@@ -343,7 +374,7 @@ class Game:
         if self.combo > 1:
             col = C_RED if self.combo >= 5 else C_ORANGE
             shadowed_text(frame, f"x{self.combo} COMBO!",
-                          (w//2-75, 38), color=col)
+                          (w//2-75, 100), color=col)
         elapsed = int(time.time() - self.start_time)
         shadowed_text(frame, f"{elapsed:04d}s", (w-90, 38), scale=0.75)
 
@@ -380,10 +411,12 @@ class Game:
 
         # popups
         now = time.time()
-        self.popups = [p for p in self.popups if now - p["t"] < 1.5]
+        self.popups = [p for p in self.popups if now - p["t"] < 0.8]
         for p in self.popups:
             age = now - p["t"]
-            shadowed_text(frame, p["text"], (p["x"]-55, int(p["y"] - age*60)),
+            fade = max(0, 1 - age / 0.5)
+            color = tuple(int(c * fade) for c in C_GOLD)
+            shadowed_text(frame, p["text"], (p["x"]-55, int(p["y"] - age*80)),
                           scale=0.85, color=C_GOLD)
 
         # verdict banner
@@ -465,6 +498,7 @@ def run(source, show_skeleton=True):
     while True:
         if not paused:
             ret, frame = cap.read()
+            frame = cv2.flip(frame, 1)
             if not ret:
                 if not str(source).isdigit():
                     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -497,20 +531,29 @@ def run(source, show_skeleton=True):
         # punch detection
         if form_now == "VALID" and prev_verdict != "VALID":
             game.shots += 1
-            if form.l_wrist is not None:
-                wx, wy = form.l_wrist
-                closest = 999999
-                hit_e = None
+
+            wrists = []
+            if form.l_wrist:
+                wrists.append(form.l_wrist)
+            if form.r_wrist:
+                wrists.append(form.r_wrist)
+
+            hit_e = None
+            closest = 999999
+
+            for wx, wy in wrists:
                 for e in [e for e in game.enemies if e.alive]:
                     d = math.hypot(wx - e.x, wy - e.y)
                     if d < closest:
-                        closest, hit_e = d, e
-                if hit_e and closest < 220:
-                    hit_e.alive = False
-                    hit_e.flash = 12
-                    game.register_hit(hit_e)
-                else:
-                    game.register_foul()
+                        closest = d
+                        hit_e = e
+
+            if hit_e and closest < 220:
+                hit_e.alive = False
+                hit_e.flash = 12
+                game.register_hit(hit_e)
+            else:
+                game.register_foul()
 
         prev_verdict = form_now
         game.update_enemies()
@@ -520,7 +563,7 @@ def run(source, show_skeleton=True):
         game.draw(annotated, form)
 
         # intro hint
-        if frame_idx < 150:
+        if frame_idx < 50:
             alpha = max(0.0, 1.0 - frame_idx / 100.0)
             h2, w2 = annotated.shape[:2]
             msg = "PUNCH THE MONSTERS!"
