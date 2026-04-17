@@ -13,7 +13,7 @@ except ImportError:
     print("install ultralytics first: pip install ultralytics")
     exit()
 
-# ------- config -------
+# config
 POSE_CONF = 0.4
 HIT_RADIUS = 60
 ENEMY_SPEED = 1.4
@@ -47,7 +47,7 @@ C_GOLD = (30, 185, 255)
 C_ORANGE = (20, 140, 255)
 
 
-# ------- image helpers -------
+# image helpers
 
 def load_png(filename):
     path = os.path.join(ASSET_DIR, filename)
@@ -95,7 +95,7 @@ def shadowed_text(frame, text, pos, scale=1.0, color=C_WHITE, thickness=2):
                 scale, color, thickness, cv2.LINE_AA)
 
 
-# ------- helpers -------
+# helpers
 
 def get_kp(kpts, idx):
     if kpts is None or idx >= len(kpts):
@@ -104,7 +104,7 @@ def get_kp(kpts, idx):
     return (x, y) if c >= POSE_CONF else None
 
 
-# ------- form checker -------
+# form checker
 
 class FormChecker:
     def __init__(self):
@@ -142,7 +142,7 @@ class FormChecker:
         self.l_wrist = l_wr
         self.r_wrist = r_wr
 
-        # --- LEFT ARM ---
+        # LEFT ARM
         left_valid = False
         if l_sh and l_el and l_wr:
             self._hist_l.append(l_wr[0])
@@ -154,7 +154,7 @@ class FormChecker:
             left_extended = False
             left_fast = False
 
-        # --- RIGHT ARM ---
+        # RIGHT ARM
         right_valid = False
         if r_sh and r_el and r_wr:
             self._hist_r.append(r_wr[0])
@@ -166,11 +166,9 @@ class FormChecker:
             right_extended = False
             right_fast = False
 
-        # combine state
         self.arm_extended = left_extended or right_extended
         self.fast_enough = left_fast or right_fast
 
-        # verdict
         if left_valid or right_valid:
             self.verdict = "VALID"
             self._cooldown = 15
@@ -183,7 +181,7 @@ class FormChecker:
         return self.verdict
 
 
-# ------- enemy -------
+# enemy
 
 class Enemy:
     TARGET_H = 110
@@ -246,7 +244,7 @@ class Enemy:
                 abs(fy - self.y) < self.h // 2 + HIT_RADIUS)
 
 
-# ------- suit/head overlay -------
+# suit/head overlay
 
 def draw_suit(frame, pose_res, suit_img, head_img):
     if len(pose_res) == 0:
@@ -279,7 +277,7 @@ def draw_suit(frame, pose_res, suit_img, head_img):
                     int(nose[1]) + int(head_h * -0.45), scale, opacity=0.95)
 
 
-# ------- game -------
+# game
 
 class Game:
     def __init__(self, fw, fh, enemy_pool):
@@ -325,7 +323,6 @@ class Game:
 
         self.enemies = [e for e in self.enemies
                         if e.alive or e.y <= self.fh + e.h + 20]
-        # simpler: just remove dead ones
         self.enemies = [e for e in self.enemies if e.y <= self.fh + e.h + 20]
 
         if time.time() - self.last_spawn > ENEMY_SPAWN_SEC:
@@ -461,7 +458,7 @@ class Game:
                           scale=0.65, color=col, thickness=1)
 
 
-# ------- main -------
+# Main
 
 def run(source, show_skeleton=True):
     print("loading assets...")
