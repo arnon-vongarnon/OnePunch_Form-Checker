@@ -13,12 +13,10 @@ except ImportError:
     print("install ultralytics first: pip install ultralytics")
     exit()
 
-# ─────────────────────────────────────────────
 #  CONFIG
-# ─────────────────────────────────────────────
 POSE_CONF = 0.4
 HIT_RADIUS = 60
-ENEMY_SPEED = 1.4          # px / frame
+ENEMY_SPEED = 1.4  # px / frame
 ENEMY_SPAWN_SEC = 3.0
 MAX_ENEMIES = 5
 LIVES = 3
@@ -33,7 +31,7 @@ WRIST_HISTORY = 5
 # YOLOv8 keypoint indices
 NOSE, L_SHLDR, R_SHLDR, L_WRIST, R_WRIST = 0, 5, 6, 9, 10
 
-# OPM enemy roster  (name, power_label)
+# OPM enemy roster
 ENEMY_ROSTER = [
     ("Deep Sea King",  "DRAGON"),
     ("Orochi",         "DRAGON"),
@@ -42,7 +40,7 @@ ENEMY_ROSTER = [
     ("Black Sperm",    "DRAGON"),
 ]
 
-# Assets folder – same directory as this script
+# Assets folder
 ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images")
 
 # OPM colour palette
@@ -55,9 +53,7 @@ C_GREEN = (40,  200,  40)
 C_DARK = (12,   12,  12)
 C_GOLD = (30,  185, 255)
 
-# ─────────────────────────────────────────────
 #  IMAGE HELPERS
-# ─────────────────────────────────────────────
 
 
 def load_png(filename):
@@ -67,7 +63,7 @@ def load_png(filename):
     if img is None:
         print(f"[warn] could not load: {path}")
         return None
-    if img.shape[2] == 3:                          # add alpha if missing
+    if img.shape[2] == 3:
         alpha = np.ones(img.shape[:2], dtype=np.uint8) * 255
         img = np.dstack([img, alpha])
     return img
@@ -123,9 +119,7 @@ def flash_white(img):
     out[:, :, :3] = 255
     return out
 
-# ─────────────────────────────────────────────
-#  LOAD ASSETS  (called once at startup)
-# ─────────────────────────────────────────────
+#  LOAD ASSETS
 
 
 def load_assets():
@@ -146,9 +140,7 @@ def load_assets():
     head = load_png("saitama_head.png")
     return enemies, suit, head
 
-# ─────────────────────────────────────────────
 #  HELPERS
-# ─────────────────────────────────────────────
 
 
 def get_kp(kpts, idx):
@@ -177,9 +169,7 @@ def draw_outlined_rect(frame, pt1, pt2, fill_color, border_color, alpha=0.75):
     cv2.addWeighted(ov, alpha, frame, 1 - alpha, 0, frame)
     cv2.rectangle(frame, pt1, pt2, border_color, 1)
 
-# ─────────────────────────────────────────────
 #  FORM CHECKER
-# ─────────────────────────────────────────────
 
 
 class FormChecker:
@@ -237,23 +227,21 @@ class FormChecker:
 
         return self.verdict
 
-# ─────────────────────────────────────────────
-#  ENEMY  (replaces Ref)
-# ─────────────────────────────────────────────
+#  ENEMY
 
 
 class Enemy:
-    TARGET_H = 110          # display height in pixels
+    TARGET_H = 110
 
     def __init__(self, x, fw, enemy_data):
         self.x = float(x)
         self.y = -60.0
         self.fw = fw
-        self.data = enemy_data          # dict with img / name / power
+        self.data = enemy_data
         self.alive = True
         self.flash = 0
         self.dodge_dx = 0.0
-        self.bob_t = random.uniform(0, math.tau)   # bobbing phase
+        self.bob_t = random.uniform(0, math.tau)
 
         img = enemy_data["img"]
         if img is not None:
@@ -310,9 +298,7 @@ class Enemy:
         return (abs(fx - self.x) < self.w // 2 + HIT_RADIUS and
                 abs(fy - self.y) < self.h // 2 + HIT_RADIUS)
 
-# ─────────────────────────────────────────────
-#  SUIT OVERLAY  (Saitama costume on player)
-# ─────────────────────────────────────────────
+#  Saitama costume
 
 
 def draw_saitama_suit(frame, pose_results, suit_img,
@@ -349,9 +335,7 @@ def draw_saitama_suit(frame, pose_results, suit_img,
     overlay_png(frame, suit_img, cx, cy, scale, alpha_mult=0.92)
     return frame
 
-# ─────────────────────────────────────────────
-#  HEAD OVERLAY  (Saitama bald head on player)
-# ─────────────────────────────────────────────
+# Saitama bald head
 
 
 def draw_saitama_head(frame, pose_results, head_img,
@@ -389,16 +373,14 @@ def draw_saitama_head(frame, pose_results, head_img,
     overlay_png(frame, head_img, cx, cy, scale, alpha_mult=0.95)
     return frame
 
-
-# ─────────────────────────────────────────────
 #  GAME
-# ─────────────────────────────────────────────
+
 
 class Game:
     def __init__(self, fw, fh, enemy_pool):
         self.fw = fw
         self.fh = fh
-        self.pool = enemy_pool      # list of enemy_data dicts
+        self.pool = enemy_pool
         self.reset()
 
     def reset(self):
@@ -419,7 +401,7 @@ class Game:
         self.last_spawn = time.time()
         self.start_time = time.time()
 
-    # ── spawning ─────────────────────────────
+    # spawning
 
     def spawn_enemy(self):
         alive = [e for e in self.enemies if e.alive]
@@ -450,7 +432,7 @@ class Game:
         if time.time() - self.last_spawn > ENEMY_SPAWN_SEC:
             self.spawn_enemy()
 
-    # ── hit / foul ───────────────────────────
+    # hit / foul
 
     def register_hit(self, enemy):
         now = time.time()
@@ -484,7 +466,7 @@ class Game:
         self.verdict_col = col
         self.verdict_left = VERDICT_FRAMES
 
-    # ── draw ─────────────────────────────────
+    # draw
 
     def draw(self, frame, form):
         h, w = frame.shape[:2]
@@ -501,7 +483,7 @@ class Game:
         self._draw_verdict_banner(frame, w, h)
         self._draw_bottom_stats(frame, h)
 
-    # ── HUD sub-draws ─────────────────────────
+    # HUD sub-draws
 
     def _draw_top_hud(self, frame, w):
         ov = frame.copy()
@@ -525,7 +507,7 @@ class Game:
                            (w - 90, 38), scale=0.75, color=C_WHITE)
 
     def _draw_lives(self, frame, w):
-        # Draw OPM-style red "hearts" (circles)
+        # Draw"hearts"
         for i in range(LIVES):
             cx = w - 22 - i * 30
             cy = 75
@@ -607,7 +589,7 @@ class Game:
         cv2.putText(frame, txt, (10, h - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.38, (160, 160, 160), 1)
 
-    # ── game over screen ──────────────────────
+    # game over screen
 
     def draw_gameover(self, frame):
         h, w = frame.shape[:2]
@@ -637,9 +619,7 @@ class Game:
                                (w // 2 - 120, h // 2 + 5 + i * 32),
                                scale=0.65, color=col, thickness=1)
 
-# ─────────────────────────────────────────────
 #  INTRO BANNER
-# ─────────────────────────────────────────────
 
 
 def draw_intro(frame, frame_idx):
@@ -662,9 +642,7 @@ def draw_intro(frame, frame_idx):
     cv2.putText(frame, msg, (tx, ty),
                 cv2.FONT_HERSHEY_DUPLEX, 1.1, col, 3, cv2.LINE_AA)
 
-# ─────────────────────────────────────────────
 #  MAIN
-# ─────────────────────────────────────────────
 
 
 def run(source,
@@ -714,7 +692,7 @@ def run(source,
 
         display = frame.copy()
 
-        # ── game over screen ──────────────────
+        # game over screen
         if game.over:
             game.draw_gameover(display)
             cv2.imshow(win, display)
@@ -727,27 +705,26 @@ def run(source,
                 prev_verdict = "UNKNOWN"
             continue
 
-        # ── pose inference ────────────────────
+        # pose inference
         pose_res = pose_model(frame, verbose=False)
 
-        # ── saitama suit overlay ──────────────
+        # saitama suit overlay
         if len(pose_res) > 0:
             display = draw_saitama_suit(
                 display, pose_res, suit_img,
                 width_factor=suit_width_factor,
                 vertical_offset=suit_vertical_offset
             )
-            # head drawn AFTER suit so it sits on top of the collar
             display = draw_saitama_head(
                 display, pose_res, head_img,
                 size_factor=head_size_factor,
                 vertical_offset=head_vertical_offset
             )
 
-        # ── form check ────────────────────────
+        # form check
         form_now = form.update(pose_res) if len(pose_res) > 0 else form.verdict
 
-        # ── punch edge detection ──────────────
+        # punch edge detection
         if form_now == "VALID" and prev_verdict != "VALID":
             game.shots += 1
             hit_enemy = None
@@ -768,16 +745,16 @@ def run(source,
 
         prev_verdict = form_now
 
-        # ── update enemies ────────────────────
+        # update enemies
         game.update_enemies()
 
-        # ── annotate skeleton (optional) ──────
+        # annotate skeleton
         if show_skeleton and len(pose_res) > 0:
             annotated = pose_res[0].plot(img=display)
         else:
             annotated = display
 
-        # ── draw game UI ──────────────────────
+        # UI
         game.draw(annotated, form)
         draw_intro(annotated, frame_idx)
 
@@ -791,7 +768,7 @@ def run(source,
             game.reset()
             form.reset()
             prev_verdict = "UNKNOWN"
-        elif key == ord('s'):           # toggle skeleton
+        elif key == ord('s'):
             show_skeleton = not show_skeleton
 
     cap.release()
@@ -805,12 +782,10 @@ if __name__ == "__main__":
                         help="camera index or video file path")
     parser.add_argument("--no-skeleton", action="store_true",
                         help="hide YOLO skeleton overlay")
-    # Fine-tune the suit alignment without editing code
     parser.add_argument("--suit-width",   type=float, default=2.8,
                         help="suit width factor (default 2.8, tune 1.8-3.0)")
     parser.add_argument("--suit-voffset", type=float, default=0.38,
                         help="suit vertical offset fraction (default 0.38, tune 0.2-0.5)")
-    # Fine-tune the head alignment
     parser.add_argument("--head-size",    type=float, default=1.8,
                         help="head size factor (default 1.8, tune 1.8-2.8)")
     parser.add_argument("--head-voffset", type=float, default=-0.45,
