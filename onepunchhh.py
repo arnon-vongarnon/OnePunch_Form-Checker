@@ -17,15 +17,15 @@ except ImportError:
 
 # config
 POSE_CONF = 0.4
-HIT_RADIUS = 60
+HIT_RADIUS = 70
 ENEMY_SPEED = 1.4
 ENEMY_SPAWN_SEC = 3.0
 MAX_ENEMIES = 5
 LIVES = 3
 COMBO_TIMEOUT = 3.5
 VERDICT_FRAMES = 10
-PUNCH_VEL_THRESH = 40
-WRIST_HISTORY = 5
+PUNCH_VEL_THRESH = 18
+WRIST_HISTORY = 6
 
 # keypoint indices
 NOSE, L_SHLDR, R_SHLDR, L_WRIST, R_WRIST, L_ELBOW, R_ELBOW = 0, 5, 6, 9, 10, 7, 8
@@ -150,7 +150,7 @@ class FormChecker:
             self._hist_l.append(l_wr[0])
             left_extended = l_wr[0] > l_el[0] > l_sh[0]
             left_fast = (len(self._hist_l) >= 2 and
-                         abs(self._hist_l[-1] - self._hist_l[-2]) > PUNCH_VEL_THRESH)
+                         abs(self._hist_l[-1] - self._hist_l[0]) > PUNCH_VEL_THRESH)
             left_valid = left_extended and left_fast
         else:
             left_extended = False
@@ -173,7 +173,7 @@ class FormChecker:
 
         if left_valid or right_valid:
             self.verdict = "VALID"
-            self._cooldown = 15
+            self._cooldown = 8
         else:
             if not self.arm_extended:
                 self.verdict = "FOUL"
