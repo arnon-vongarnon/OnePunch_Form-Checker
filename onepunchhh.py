@@ -106,6 +106,23 @@ def get_kp(kpts, idx):
     return (x, y) if c >= POSE_CONF else None
 
 
+def calculate_angle(a, b, c):
+    """Calculates the angle at point b given points a, b, c."""
+    if not (a and b and c):
+        return 0
+    ba = np.array(a) - np.array(b)
+    bc = np.array(c) - np.array(b)
+    cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc) + 1e-6)
+    angle = np.arccos(np.clip(cosine_angle, -1.0, 1.0))
+    return np.degrees(angle)
+
+
+def dist_2d(p1, p2):
+    if not (p1 and p2):
+        return 0
+    return math.hypot(p1[0]-p2[0], p1[1]-p2[1])
+
+
 # form checker
 
 class FormChecker:
@@ -121,64 +138,97 @@ class FormChecker:
         self.r_wrist = None
         self.arm_extended = False
         self.fast_enough = False
+        self.shoulder_width = 100  # reference unit
+        self.smooth_kpts = {}
+        self.v_ratio = 0.0 # for UI bar
+
+    def _update_smooth_kpts(self, pose_results):
+        r = pose_results[0]
+        if r.keypoints is None or len(r.keypoints.data) == 0:
+            return
+        kpts = r.keypoints.data[0]
+        alpha = 0.5  # smoothing factor
+        needed = [L_SHLDR, R_SHLDR, L_ELBOW, R_ELBOW, L_WRIST, R_WRIST, NOSE]
+        for idx in needed:
+            kp = get_kp(kpts, idx)
+            if kp:
+                if idx in self.smooth_kpts:
+                    prev = self.smooth_kpts[idx]
+                    self.smooth_kpts[idx] = (
+                        prev[0]*(1-alpha) + kp[0]*alpha,
+                        prev[1]*(1-alpha) + kp[1]*alpha
+                    )
+                else:
+                    self.smooth_kpts[idx] = kp
 
     def update(self, pose_results):
+        self._update_smooth_kpts(pose_results)
+
         if self._cooldown > 0:
             self._cooldown -= 1
             return self.verdict
 
-        r = pose_results[0]
-        if r.keypoints is None or len(r.keypoints.data) == 0:
-            return self.verdict
-
-        kpts = r.keypoints.data[0]
-
-        l_sh = get_kp(kpts, L_SHLDR)
-        l_el = get_kp(kpts, L_ELBOW)
-        l_wr = get_kp(kpts, L_WRIST)
-
-        r_sh = get_kp(kpts, R_SHLDR)
-        r_el = get_kp(kpts, R_ELBOW)
-        r_wr = get_kp(kpts, R_WRIST)
+        l_sh = self.smooth_kpts.get(L_SHLDR)
+        l_el = self.smooth_kpts.get(L_ELBOW)
+        l_wr = self.smooth_kpts.get(L_WRIST)
+        r_sh = self.smooth_kpts.get(R_SHLDR)
+        r_el = self.smooth_kpts.get(R_ELBOW)
+        r_wr = self.smooth_kpts.get(R_WRIST)
 
         self.l_wrist = l_wr
         self.r_wrist = r_wr
 
+        if l_sh and r_sh:
+            self.shoulder_width = max(20, dist_2d(l_sh, r_sh))
+
+        # normalize velocity threshold by player distance (torso size)
+        norm_v_thresh = (PUNCH_VEL_THRESH / 100.0) * self.shoulder_width
+
         # LEFT ARM
         left_valid = False
+        left_extended = False
+        left_fast = False
         if l_sh and l_el and l_wr:
-            self._hist_l.append(l_wr[0])
-            left_extended = l_wr[0] > l_el[0] > l_sh[0]
-            left_fast = (len(self._hist_l) >= 2 and
-                         abs(self._hist_l[-1] - self._hist_l[0]) > PUNCH_VEL_THRESH)
+            self._hist_l.append(l_wr)
+            angle = calculate_angle(l_sh, l_el, l_wr)
+            # Extension: straight arm OR wrist significantly far from shoulder
+            left_extended = (angle > 158) or (dist_2d(l_wr, l_sh) > 1.45 * dist_2d(l_el, l_sh))
+            if len(self._hist_l) >= 3:
+                # 2D velocity vector
+                v = dist_2d(self._hist_l[-1], self._hist_l[0])
+                left_fast = v > norm_v_thresh
             left_valid = left_extended and left_fast
-        else:
-            left_extended = False
-            left_fast = False
 
         # RIGHT ARM
         right_valid = False
+        right_extended = False
+        right_fast = False
         if r_sh and r_el and r_wr:
-            self._hist_r.append(r_wr[0])
-            right_extended = r_wr[0] < r_el[0] < r_sh[0]
-            right_fast = (len(self._hist_r) >= 2 and
-                          abs(self._hist_r[-1] - self._hist_r[-2]) > PUNCH_VEL_THRESH)
+            self._hist_r.append(r_wr)
+            angle = calculate_angle(r_sh, r_el, r_wr)
+            right_extended = (angle > 158) or (dist_2d(r_wr, r_sh) > 1.45 * dist_2d(r_el, r_sh))
+            if len(self._hist_r) >= 3:
+                v = dist_2d(self._hist_r[-1], self._hist_r[0])
+                right_fast = v > norm_v_thresh
             right_valid = right_extended and right_fast
-        else:
-            right_extended = False
-            right_fast = False
 
         self.arm_extended = left_extended or right_extended
         self.fast_enough = left_fast or right_fast
+        
+        # calculate max velocity ratio for UI
+        v_l = dist_2d(self._hist_l[-1], self._hist_l[0]) if len(self._hist_l) >= 3 else 0
+        v_r = dist_2d(self._hist_r[-1], self._hist_r[0]) if len(self._hist_r) >= 3 else 0
+        self.v_ratio = max(v_l, v_r) / (norm_v_thresh + 1e-6)
 
         if left_valid or right_valid:
             self.verdict = "VALID"
-            self._cooldown = 8
+            self._cooldown = 7
+        elif self.arm_extended and not self.fast_enough:
+            self.verdict = "UNKNOWN"
+        elif not self.arm_extended and (left_fast or right_fast):
+            self.verdict = "FOUL"
         else:
-            if not self.arm_extended:
-                self.verdict = "FOUL"
-            else:
-                self.verdict = "UNKNOWN"
+            self.verdict = "UNKNOWN"
 
         return self.verdict
 
@@ -388,17 +438,29 @@ class Game:
         # punch panel
         px, py = w - 215, 100
         ov2 = frame.copy()
-        cv2.rectangle(ov2, (px-8, py-8), (px+205, py+80), (8, 8, 20), -1)
+        cv2.rectangle(ov2, (px-8, py-8), (px+205, py+98), (8, 8, 20), -1)
         cv2.addWeighted(ov2, 0.65, frame, 0.35, 0, frame)
-        cv2.rectangle(frame, (px-8, py-8), (px+205, py+80), C_YELLOW, 1)
+        cv2.rectangle(frame, (px-8, py-8), (px+205, py+98), C_YELLOW, 1)
         shadowed_text(frame, "PUNCH ANALYSIS", (px, py+15), scale=0.48,
                       color=C_YELLOW, thickness=1)
-        for i, (label, ok) in enumerate([("Arm extended", form.arm_extended),
-                                         ("Fast enough",  form.fast_enough)]):
-            col = C_GREEN if ok else C_RED
-            icon = "OK" if ok else "--"
-            cv2.putText(frame, f"[{icon}] {label}", (px, py+38+i*24),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, col, 1, cv2.LINE_AA)
+
+        # Speed bar
+        bar_w = 190
+        bar_x, bar_y = px, py + 28
+        cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + 6), (40, 40, 40), -1)
+        fill_w = int(bar_w * min(1.0, form.v_ratio))
+        bar_col = C_GREEN if form.v_ratio >= 1.0 else C_ORANGE
+        cv2.rectangle(frame, (bar_x, bar_y), (bar_x + fill_w, bar_y + 6), bar_col, -1)
+        cv2.putText(frame, "SPEED", (px, bar_y - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.35, C_WHITE, 1)
+
+        for i, (label, ok) in enumerate([("Extension", form.arm_extended),
+                                         ("Velocity",  form.fast_enough)]):
+            col = C_GREEN if ok else (100, 100, 100)
+            dot_y = py + 52 + i*22
+            cv2.circle(frame, (px + 6, dot_y), 4, col, -1)
+            cv2.putText(frame, label, (px + 18, dot_y + 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, C_WHITE if ok else (160, 160, 160), 1, cv2.LINE_AA)
+
         for wrist, label in [(form.l_wrist, "L"), (form.r_wrist, "R")]:
             if wrist is None:
                 continue
