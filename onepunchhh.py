@@ -8,6 +8,7 @@ import math
 import argparse
 import os
 from collections import deque
+import sys
 
 try:
     from ultralytics import YOLO
@@ -18,7 +19,7 @@ except ImportError:
 # config
 POSE_CONF = 0.4
 HIT_RADIUS = 70
-ENEMY_SPEED = 1.4
+ENEMY_SPEED = 6
 ENEMY_SPAWN_SEC = 3.0
 MAX_ENEMIES = 5
 LIVES = 3
@@ -30,7 +31,18 @@ WRIST_HISTORY = 6
 # keypoint indices
 NOSE, L_SHLDR, R_SHLDR, L_WRIST, R_WRIST, L_ELBOW, R_ELBOW = 0, 5, 6, 9, 10, 7, 8
 
-ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images")
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+
+ASSET_DIR = resource_path("images")
 
 ENEMY_ROSTER = [
     ("Deep Sea King", "DeepSeaKing.png"),
@@ -269,64 +281,26 @@ class Enemy:
             self.flash -= 1
 
     def draw(self, frame):
-        x = int(self.x)
-        y = int(self.y + math.sin(self.bob_t) * 4)
-
-        if self.img is not None:
-            img = self.img.copy()
-            if self.flash > 0:
-                img[:, :, :3] = 255
-            overlay_png(frame, img, x, y, self.scale)
-        else:
-            hw, hh = self.w // 2, self.h // 2
-            col = C_WHITE if self.flash > 0 else (40, 40, 180)
-            cv2.rectangle(frame, (x-hw, y-hh), (x+hw, y+hh), col, -1)
-
-        # name badge
-        (tw, th), _ = cv2.getTextSize(
-            self.name, cv2.FONT_HERSHEY_SIMPLEX, 0.38, 1)
-        tx = x - tw // 2
-        ty = y + self.h // 2 + 16
-        cv2.rectangle(frame, (tx-4, ty-th-2), (tx+tw+4, ty+4), C_RED, -1)
-        cv2.putText(frame, self.name, (tx, ty),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.38, C_WHITE, 1, cv2.LINE_AA)
+        x, y = int(self.x), int(self.y)
+        hw, hh = self.w // 2, self.h // 2
+        
+        # Color: Flash white on hit, otherwise red
+        col = C_WHITE if self.flash > 0 else C_RED
+        
+        # Draw the hitbox circle
+        radius = self.w // 2
+        cv2.circle(frame, (x, y), radius, col, 2)
+        
+        # Subtle fill
+        overlay = frame.copy()
+        cv2.circle(overlay, (x, y), radius, col, -1)
+        cv2.addWeighted(overlay, 0.15, frame, 0.85, 0, frame)
 
     def near_fist(self, fx, fy):
         return (abs(fx - self.x) < self.w // 2 + HIT_RADIUS and
                 abs(fy - self.y) < self.h // 2 + HIT_RADIUS)
 
 
-# suit/head overlay
-
-def draw_suit(frame, pose_res, suit_img, head_img):
-    if len(pose_res) == 0:
-        return
-    r = pose_res[0]
-    if r.keypoints is None or len(r.keypoints.data) == 0:
-        return
-    kpts = r.keypoints.data[0]
-    l_sh = get_kp(kpts, L_SHLDR)
-    r_sh = get_kp(kpts, R_SHLDR)
-    nose = get_kp(kpts, NOSE)
-    if not (l_sh and r_sh):
-        return
-
-    sw = math.hypot(l_sh[0]-r_sh[0], l_sh[1]-r_sh[1])
-    if sw < 10:
-        return
-    cx = int((l_sh[0] + r_sh[0]) / 2)
-    cy = int((l_sh[1] + r_sh[1]) / 2)
-
-    if suit_img is not None:
-        scale = (sw * 2.8) / suit_img.shape[1]
-        offset = int(suit_img.shape[0] * scale * 0.38)
-        overlay_png(frame, suit_img, cx, cy + offset, scale, opacity=0.92)
-
-    if head_img is not None and nose:
-        scale = (sw * 1.8) / head_img.shape[1]
-        head_h = int(head_img.shape[0] * scale)
-        overlay_png(frame, head_img, int(nose[0]),
-                    int(nose[1]) + int(head_h * -0.45), scale, opacity=0.95)
 
 
 # game
@@ -531,11 +505,9 @@ def run(source, show_skeleton=True):
         img = load_png(fname)
         enemy_pool.append((name, img))
 
-    suit_img = load_png("saitama_suit.png")
-    head_img = load_png("saitama_head.png")
 
     print("loading YOLO pose model...")
-    pose_model = YOLO("yolov8n-pose.pt")
+    pose_model = YOLO(resource_path("yolov8n-pose.pt"))
 
     src = int(source) if str(source).isdigit() else source
     cap = cv2.VideoCapture(src)
@@ -583,9 +555,6 @@ def run(source, show_skeleton=True):
 
         pose_res = pose_model(frame, verbose=False)
 
-        # saitama overlay
-        if len(pose_res) > 0:
-            draw_suit(display, pose_res, suit_img, head_img)
 
         form_now = form.update(pose_res) if len(pose_res) > 0 else form.verdict
 
