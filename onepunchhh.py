@@ -42,14 +42,12 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 
-ASSET_DIR = resource_path("images")
-
 ENEMY_ROSTER = [
-    ("Deep Sea King", "DeepSeaKing.png"),
-    ("Orochi",        "Orochi.png"),
-    ("Psykos",        "Psykos.png"),
-    ("Tatsumaki",     "Tatsumaki.png"),
-    ("Black Sperm",   "BlackSperm.png"),
+    "Deep Sea King",
+    "Orochi",
+    "Psykos",
+    "Tatsumaki",
+    "Black Sperm",
 ]
 
 C_YELLOW = (0, 215, 255)
@@ -61,44 +59,6 @@ C_GOLD = (30, 185, 255)
 C_ORANGE = (20, 140, 255)
 
 
-# image helpers
-
-def load_png(filename):
-    path = os.path.join(ASSET_DIR, filename)
-    img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-    if img is None:
-        print(f"[warn] missing: {path}")
-        return None
-    if img.shape[2] == 3:
-        img = np.dstack([img, np.full(img.shape[:2], 255, dtype=np.uint8)])
-    return img
-
-
-def overlay_png(bg, img, cx, cy, scale=1.0, opacity=1.0):
-    if img is None:
-        return
-    nh = max(1, int(img.shape[0] * scale))
-    nw = max(1, int(img.shape[1] * scale))
-    img = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_AREA)
-
-    x1, y1 = cx - nw // 2, cy - nh // 2
-    x2, y2 = x1 + nw, y1 + nh
-    bh, bw = bg.shape[:2]
-    ox1 = max(0, -x1)
-    oy1 = max(0, -y1)
-    ox2 = nw - max(0, x2 - bw)
-    oy2 = nh - max(0, y2 - bh)
-    x1 = max(0, x1)
-    y1 = max(0, y1)
-    x2 = min(bw, x2)
-    y2 = min(bh, y2)
-    if x2 <= x1 or y2 <= y1:
-        return
-
-    roi = img[oy1:oy2, ox1:ox2]
-    alpha = roi[:, :, 3:4].astype(np.float32) / 255.0 * opacity
-    bg[y1:y2, x1:x2] = (roi[:, :, :3] * alpha +
-                        bg[y1:y2, x1:x2] * (1 - alpha)).astype(np.uint8)
 
 
 def shadowed_text(frame, text, pos, scale=1.0, color=C_WHITE, thickness=2):
@@ -250,24 +210,16 @@ class FormChecker:
 class Enemy:
     TARGET_H = 110
 
-    def __init__(self, x, fw, name, img):
+    def __init__(self, x, fw, name):
         self.x = float(x)
         self.y = -60.0
         self.fw = fw
         self.name = name
-        self.img = img
         self.alive = True
         self.flash = 0
         self.dodge_dx = 0.0
         self.bob_t = random.uniform(0, math.tau)
-
-        if img is not None:
-            ratio = self.TARGET_H / img.shape[0]
-            self.w = int(img.shape[1] * ratio)
-            self.h = self.TARGET_H
-            self.scale = ratio
-        else:
-            self.w, self.h, self.scale = 70, 90, 1.0
+        self.w, self.h = 70, 90
 
     def update(self):
         self.y += ENEMY_SPEED
@@ -333,8 +285,8 @@ class Game:
         if len([e for e in self.enemies if e.alive]) >= MAX_ENEMIES:
             return
         x = random.randint(80, self.fw - 80)
-        name, img = random.choice(self.pool)
-        self.enemies.append(Enemy(x, self.fw, name, img))
+        name = random.choice(self.pool)
+        self.enemies.append(Enemy(x, self.fw, name))
         self.last_spawn = time.time()
 
     def update_enemies(self):
@@ -499,11 +451,7 @@ class Game:
 # Main
 
 def run(source, show_skeleton=True):
-    print("loading assets...")
-    enemy_pool = []
-    for name, fname in ENEMY_ROSTER:
-        img = load_png(fname)
-        enemy_pool.append((name, img))
+    enemy_pool = ENEMY_ROSTER
 
 
     print("loading YOLO pose model...")
@@ -511,6 +459,9 @@ def run(source, show_skeleton=True):
 
     src = int(source) if str(source).isdigit() else source
     cap = cv2.VideoCapture(src)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 960)
+    
     if not cap.isOpened():
         print(f"can't open: {source}")
         return
